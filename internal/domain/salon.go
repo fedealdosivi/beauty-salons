@@ -46,9 +46,10 @@ type Salon struct {
 
 // Category represents a type of beauty business
 type Category struct {
-	ID   int64  `json:"id" db:"id"`
-	Name string `json:"name" db:"name"`
-	Slug string `json:"slug" db:"slug"`
+	ID        int64     `json:"id" db:"id"`
+	Name      string    `json:"name" db:"name"`
+	Slug      string    `json:"slug" db:"slug"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
 // Service represents a service offered by a salon
