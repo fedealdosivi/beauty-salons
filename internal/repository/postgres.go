@@ -10,6 +10,102 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// salonRow represents a salon as stored in the database (flat structure)
+type salonRow struct {
+	ID          int64    `db:"id"`
+	Name        string   `db:"name"`
+	Slug        string   `db:"slug"`
+	Description *string  `db:"description"`
+	Address     *string  `db:"address"`
+	City        *string  `db:"city"`
+	State       *string  `db:"state"`
+	PostalCode  *string  `db:"postal_code"`
+	Country     *string  `db:"country"`
+	Latitude    *float64 `db:"latitude"`
+	Longitude   *float64 `db:"longitude"`
+	Phone       *string  `db:"phone"`
+	Email       *string  `db:"email"`
+	Website     *string  `db:"website"`
+	CategoryID  *int64   `db:"category_id"`
+	PriceRange  *int     `db:"price_range"`
+	Rating      *float64 `db:"rating"`
+	ReviewCount *int     `db:"review_count"`
+	IsActive    bool     `db:"is_active"`
+	IsVerified  bool     `db:"is_verified"`
+	CreatedAt   string   `db:"created_at"`
+	UpdatedAt   string   `db:"updated_at"`
+
+	// Joined fields
+	CategoryName *string `db:"category_name"`
+	TotalCount   int     `db:"total_count"`
+}
+
+// toDomain converts a database row to a domain Salon
+func (r *salonRow) toDomain() domain.Salon {
+	salon := domain.Salon{
+		ID:          r.ID,
+		Name:        r.Name,
+		Slug:        r.Slug,
+		Description: r.Description,
+		CategoryID:  r.CategoryID,
+		IsActive:    r.IsActive,
+		IsVerified:  r.IsVerified,
+	}
+
+	// Map Location
+	if r.Address != nil {
+		salon.Location.Address = *r.Address
+	}
+	if r.City != nil {
+		salon.Location.City = *r.City
+	}
+	if r.State != nil {
+		salon.Location.State = *r.State
+	}
+	if r.PostalCode != nil {
+		salon.Location.PostalCode = *r.PostalCode
+	}
+	if r.Country != nil {
+		salon.Location.Country = *r.Country
+	}
+	if r.Latitude != nil && r.Longitude != nil {
+		salon.Location.GeoPoint = &domain.GeoPoint{
+			Latitude:  *r.Latitude,
+			Longitude: *r.Longitude,
+		}
+	}
+
+	// Map Contact
+	if r.Phone != nil {
+		salon.Contact.Phone = *r.Phone
+	}
+	if r.Email != nil {
+		salon.Contact.Email = *r.Email
+	}
+	if r.Website != nil {
+		salon.Contact.Website = *r.Website
+	}
+
+	// Map business info
+	if r.PriceRange != nil {
+		salon.PriceRange = domain.PriceRange(*r.PriceRange)
+	}
+	salon.Rating = r.Rating
+	if r.ReviewCount != nil {
+		salon.ReviewCount = *r.ReviewCount
+	}
+
+	// Map category if joined
+	if r.CategoryName != nil {
+		salon.Category = &domain.Category{
+			ID:   *r.CategoryID,
+			Name: *r.CategoryName,
+		}
+	}
+
+	return salon
+}
+
 // PostgresRepository handles all database operations.
 type PostgresRepository struct {
 	db *sqlx.DB
@@ -39,17 +135,28 @@ func (r *PostgresRepository) Close() error {
 func (r *PostgresRepository) GetAllSalons(ctx context.Context) ([]domain.Salon, error) {
 	query := `
 		SELECT
-			s.*,
-			c.name as category_name
+			s.id, s.name, s.slug, s.description,
+			s.address, s.city, s.state, s.postal_code, s.country,
+			s.latitude, s.longitude,
+			s.phone, s.email, s.website,
+			s.category_id, s.price_range, s.rating, s.review_count,
+			s.is_active, s.is_verified, s.created_at, s.updated_at,
+			c.name as category_name,
+			0 as total_count
 		FROM salons s
 		LEFT JOIN categories c ON s.category_id = c.id
 		WHERE s.is_active = true
 		ORDER BY s.id
 	`
 
-	var salons []domain.Salon
-	if err := r.db.SelectContext(ctx, &salons, query); err != nil {
+	var rows []salonRow
+	if err := r.db.SelectContext(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("failed to get salons: %w", err)
+	}
+
+	salons := make([]domain.Salon, len(rows))
+	for i, row := range rows {
+		salons[i] = row.toDomain()
 	}
 
 	return salons, nil
@@ -59,33 +166,52 @@ func (r *PostgresRepository) GetAllSalons(ctx context.Context) ([]domain.Salon, 
 func (r *PostgresRepository) GetSalonByID(ctx context.Context, id int64) (*domain.Salon, error) {
 	query := `
 		SELECT
-			s.*,
-			c.name as category_name
+			s.id, s.name, s.slug, s.description,
+			s.address, s.city, s.state, s.postal_code, s.country,
+			s.latitude, s.longitude,
+			s.phone, s.email, s.website,
+			s.category_id, s.price_range, s.rating, s.review_count,
+			s.is_active, s.is_verified, s.created_at, s.updated_at,
+			c.name as category_name,
+			0 as total_count
 		FROM salons s
 		LEFT JOIN categories c ON s.category_id = c.id
 		WHERE s.id = $1
 	`
 
-	var salon domain.Salon
-	if err := r.db.GetContext(ctx, &salon, query, id); err != nil {
+	var row salonRow
+	if err := r.db.GetContext(ctx, &row, query, id); err != nil {
 		return nil, fmt.Errorf("failed to get salon: %w", err)
 	}
 
+	salon := row.toDomain()
+
 	// Get services for this salon
-	servicesQuery := `SELECT * FROM services WHERE salon_id = $1`
+	servicesQuery := `SELECT id, salon_id, name, description, price_min, price_max, duration_minutes, created_at FROM services WHERE salon_id = $1`
 	if err := r.db.SelectContext(ctx, &salon.Services, servicesQuery, id); err != nil {
 		return nil, fmt.Errorf("failed to get services: %w", err)
 	}
 
 	// Get amenities for this salon
 	amenitiesQuery := `
-		SELECT a.name
+		SELECT a.id, a.name, a.icon
 		FROM amenities a
 		JOIN salon_amenities sa ON a.id = sa.amenity_id
 		WHERE sa.salon_id = $1
 	`
 	if err := r.db.SelectContext(ctx, &salon.Amenities, amenitiesQuery, id); err != nil {
 		return nil, fmt.Errorf("failed to get amenities: %w", err)
+	}
+
+	// Get operating hours for this salon
+	hoursQuery := `
+		SELECT id, salon_id, day_of_week, open_time, close_time, is_closed
+		FROM operating_hours
+		WHERE salon_id = $1
+		ORDER BY day_of_week
+	`
+	if err := r.db.SelectContext(ctx, &salon.OperatingHours, hoursQuery, id); err != nil {
+		return nil, fmt.Errorf("failed to get operating hours: %w", err)
 	}
 
 	return &salon, nil
@@ -96,7 +222,12 @@ func (r *PostgresRepository) SearchSalons(ctx context.Context, params domain.Sal
 	// Base query with full-text search
 	query := `
 		SELECT
-			s.*,
+			s.id, s.name, s.slug, s.description,
+			s.address, s.city, s.state, s.postal_code, s.country,
+			s.latitude, s.longitude,
+			s.phone, s.email, s.website,
+			s.category_id, s.price_range, s.rating, s.review_count,
+			s.is_active, s.is_verified, s.created_at, s.updated_at,
 			c.name as category_name,
 			COUNT(*) OVER() as total_count
 		FROM salons s
@@ -129,9 +260,9 @@ func (r *PostgresRepository) SearchSalons(ctx context.Context, params domain.Sal
 	}
 
 	// Price range filter
-	if params.PriceRange != nil {
+	if params.PriceRange != 0 {
 		query += fmt.Sprintf(` AND s.price_range = $%d`, argNum)
-		args = append(args, *params.PriceRange)
+		args = append(args, params.PriceRange)
 		argNum++
 	}
 
@@ -147,8 +278,45 @@ func (r *PostgresRepository) SearchSalons(ctx context.Context, params domain.Sal
 		query += ` AND s.is_verified = true`
 	}
 
-	// Order by rating
-	query += ` ORDER BY s.rating DESC NULLS LAST, s.review_count DESC`
+	// Geo search (within radius)
+	if params.Location != nil && params.RadiusKm != nil {
+		// Using Haversine formula approximation
+		query += fmt.Sprintf(` AND (
+			6371 * acos(
+				cos(radians($%d)) * cos(radians(s.latitude)) *
+				cos(radians(s.longitude) - radians($%d)) +
+				sin(radians($%d)) * sin(radians(s.latitude))
+			)
+		) <= $%d`, argNum, argNum+1, argNum+2, argNum+3)
+		args = append(args, params.Location.Latitude, params.Location.Longitude, params.Location.Latitude, *params.RadiusKm)
+		argNum += 4
+	}
+
+	// Order by
+	switch params.SortBy {
+	case domain.SortByRating:
+		query += ` ORDER BY s.rating DESC NULLS LAST, s.review_count DESC`
+	case domain.SortByReviews:
+		query += ` ORDER BY s.review_count DESC, s.rating DESC NULLS LAST`
+	case domain.SortByNewest:
+		query += ` ORDER BY s.created_at DESC`
+	case domain.SortByDistance:
+		if params.Location != nil {
+			query += fmt.Sprintf(` ORDER BY (
+				6371 * acos(
+					cos(radians($%d)) * cos(radians(s.latitude)) *
+					cos(radians(s.longitude) - radians($%d)) +
+					sin(radians($%d)) * sin(radians(s.latitude))
+				)
+			) ASC`, argNum, argNum+1, argNum+2)
+			args = append(args, params.Location.Latitude, params.Location.Longitude, params.Location.Latitude)
+			argNum += 3
+		} else {
+			query += ` ORDER BY s.rating DESC NULLS LAST`
+		}
+	default:
+		query += ` ORDER BY s.rating DESC NULLS LAST, s.review_count DESC`
+	}
 
 	// Pagination
 	if params.PageSize <= 0 {
@@ -162,20 +330,16 @@ func (r *PostgresRepository) SearchSalons(ctx context.Context, params domain.Sal
 	query += fmt.Sprintf(` LIMIT $%d OFFSET $%d`, argNum, argNum+1)
 	args = append(args, params.PageSize, offset)
 
-	var results []struct {
-		domain.Salon
-		TotalCount int `db:"total_count"`
-	}
-
-	if err := r.db.SelectContext(ctx, &results, query, args...); err != nil {
+	var rows []salonRow
+	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, 0, fmt.Errorf("failed to search salons: %w", err)
 	}
 
-	salons := make([]domain.Salon, len(results))
+	salons := make([]domain.Salon, len(rows))
 	totalCount := 0
-	for i, r := range results {
-		salons[i] = r.Salon
-		totalCount = r.TotalCount
+	for i, row := range rows {
+		salons[i] = row.toDomain()
+		totalCount = row.TotalCount
 	}
 
 	return salons, totalCount, nil
