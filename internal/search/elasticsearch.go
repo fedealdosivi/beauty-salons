@@ -311,7 +311,7 @@ func (es *ElasticsearchClient) Search(ctx context.Context, params domain.SalonSe
 	return salons, total, nil
 }
 
-// GetClusterHealth returns cluster health information 
+// GetClusterHealth returns cluster health information
 func (es *ElasticsearchClient) GetClusterHealth(ctx context.Context) (map[string]interface{}, error) {
 	res, err := es.client.Cluster.Health(
 		es.client.Cluster.Health.WithContext(ctx),
@@ -364,7 +364,7 @@ func (es *ElasticsearchClient) buildQuery(params domain.SalonSearchParams) map[s
 		})
 	}
 
-	// Filters 
+	// Filters
 	filter = append(filter, map[string]interface{}{
 		"term": map[string]interface{}{
 			"is_active": true,
@@ -387,10 +387,10 @@ func (es *ElasticsearchClient) buildQuery(params domain.SalonSearchParams) map[s
 		})
 	}
 
-	if params.PriceRange != nil {
+	if params.PriceRange != 0 {
 		filter = append(filter, map[string]interface{}{
 			"term": map[string]interface{}{
-				"price_range": *params.PriceRange,
+				"price_range": params.PriceRange,
 			},
 		})
 	}
@@ -414,13 +414,13 @@ func (es *ElasticsearchClient) buildQuery(params domain.SalonSearchParams) map[s
 	}
 
 	// Geo-distance filter
-	if params.Latitude != nil && params.Longitude != nil && params.RadiusKm != nil {
+	if params.Location != nil && params.RadiusKm != nil {
 		filter = append(filter, map[string]interface{}{
 			"geo_distance": map[string]interface{}{
 				"distance": fmt.Sprintf("%fkm", *params.RadiusKm),
 				"location": map[string]interface{}{
-					"lat": *params.Latitude,
-					"lon": *params.Longitude,
+					"lat": params.Location.Latitude,
+					"lon": params.Location.Longitude,
 				},
 			},
 		})
@@ -444,6 +444,33 @@ func (es *ElasticsearchClient) buildQuery(params domain.SalonSearchParams) map[s
 	}
 	from := (page - 1) * pageSize
 
+	// Build sort
+	sort := []map[string]interface{}{}
+	switch params.SortBy {
+	case domain.SortByRating:
+		sort = append(sort, map[string]interface{}{"rating": map[string]interface{}{"order": "desc", "missing": "_last"}})
+	case domain.SortByReviews:
+		sort = append(sort, map[string]interface{}{"review_count": map[string]interface{}{"order": "desc"}})
+	case domain.SortByNewest:
+		sort = append(sort, map[string]interface{}{"created_at": map[string]interface{}{"order": "desc"}})
+	case domain.SortByDistance:
+		if params.Location != nil {
+			sort = append(sort, map[string]interface{}{
+				"_geo_distance": map[string]interface{}{
+					"location": map[string]interface{}{
+						"lat": params.Location.Latitude,
+						"lon": params.Location.Longitude,
+					},
+					"order": "asc",
+					"unit":  "km",
+				},
+			})
+		}
+	default:
+		sort = append(sort, map[string]interface{}{"_score": "desc"})
+		sort = append(sort, map[string]interface{}{"rating": map[string]interface{}{"order": "desc", "missing": "_last"}})
+	}
+
 	return map[string]interface{}{
 		"query": map[string]interface{}{
 			"bool": map[string]interface{}{
@@ -451,10 +478,7 @@ func (es *ElasticsearchClient) buildQuery(params domain.SalonSearchParams) map[s
 				"filter": filter,
 			},
 		},
-		"sort": []map[string]interface{}{
-			{"_score": "desc"},
-			{"rating": map[string]interface{}{"order": "desc", "missing": "_last"}},
-		},
+		"sort": sort,
 		"from": from,
 		"size": pageSize,
 	}
@@ -467,11 +491,13 @@ func (es *ElasticsearchClient) salonToDocument(salon *domain.Salon) map[string]i
 		"name":         salon.Name,
 		"slug":         salon.Slug,
 		"description":  salon.Description,
-		"address":      salon.Address,
-		"city":         salon.City,
-		"state":        salon.State,
-		"country":      salon.Country,
-		"phone":        salon.Phone,
+		"address":      salon.Location.Address,
+		"city":         salon.Location.City,
+		"state":        salon.Location.State,
+		"country":      salon.Location.Country,
+		"phone":        salon.Contact.Phone,
+		"email":        salon.Contact.Email,
+		"website":      salon.Contact.Website,
 		"category_id":  salon.CategoryID,
 		"price_range":  salon.PriceRange,
 		"rating":       salon.Rating,
@@ -481,15 +507,15 @@ func (es *ElasticsearchClient) salonToDocument(salon *domain.Salon) map[string]i
 	}
 
 	// Add geo-point if coordinates exist
-	if salon.Latitude != nil && salon.Longitude != nil {
+	if salon.Location.GeoPoint != nil {
 		doc["location"] = map[string]interface{}{
-			"lat": *salon.Latitude,
-			"lon": *salon.Longitude,
+			"lat": salon.Location.GeoPoint.Latitude,
+			"lon": salon.Location.GeoPoint.Longitude,
 		}
 	}
 
-	if salon.CategoryName != nil {
-		doc["category_name"] = *salon.CategoryName
+	if salon.Category != nil {
+		doc["category_name"] = salon.Category.Name
 	}
 
 	if len(salon.Services) > 0 {
@@ -505,7 +531,11 @@ func (es *ElasticsearchClient) salonToDocument(salon *domain.Salon) map[string]i
 	}
 
 	if len(salon.Amenities) > 0 {
-		doc["amenities"] = salon.Amenities
+		amenityNames := make([]string, len(salon.Amenities))
+		for i, a := range salon.Amenities {
+			amenityNames[i] = a.Name
+		}
+		doc["amenities"] = amenityNames
 	}
 
 	return doc
@@ -527,35 +557,71 @@ func (es *ElasticsearchClient) documentToSalon(doc map[string]interface{}) domai
 	if v, ok := doc["description"].(string); ok {
 		salon.Description = &v
 	}
-	if v, ok := doc["city"].(string); ok {
-		salon.City = &v
-	}
+
+	// Location fields
 	if v, ok := doc["address"].(string); ok {
-		salon.Address = &v
+		salon.Location.Address = v
 	}
+	if v, ok := doc["city"].(string); ok {
+		salon.Location.City = v
+	}
+	if v, ok := doc["state"].(string); ok {
+		salon.Location.State = v
+	}
+	if v, ok := doc["country"].(string); ok {
+		salon.Location.Country = v
+	}
+	if loc, ok := doc["location"].(map[string]interface{}); ok {
+		if lat, ok := loc["lat"].(float64); ok {
+			if lon, ok := loc["lon"].(float64); ok {
+				salon.Location.GeoPoint = &domain.GeoPoint{
+					Latitude:  lat,
+					Longitude: lon,
+				}
+			}
+		}
+	}
+
+	// Contact fields
+	if v, ok := doc["phone"].(string); ok {
+		salon.Contact.Phone = v
+	}
+	if v, ok := doc["email"].(string); ok {
+		salon.Contact.Email = v
+	}
+	if v, ok := doc["website"].(string); ok {
+		salon.Contact.Website = v
+	}
+
+	// Business info
 	if v, ok := doc["rating"].(float64); ok {
 		salon.Rating = &v
 	}
 	if v, ok := doc["review_count"].(float64); ok {
-		count := int(v)
-		salon.ReviewCount = &count
+		salon.ReviewCount = int(v)
 	}
 	if v, ok := doc["price_range"].(float64); ok {
-		pr := int(v)
-		salon.PriceRange = &pr
+		salon.PriceRange = domain.PriceRange(int(v))
 	}
 	if v, ok := doc["is_verified"].(bool); ok {
 		salon.IsVerified = v
 	}
+	if v, ok := doc["is_active"].(bool); ok {
+		salon.IsActive = v
+	}
 	if v, ok := doc["category_name"].(string); ok {
-		salon.CategoryName = &v
+		salon.Category = &domain.Category{Name: v}
+	}
+	if v, ok := doc["category_id"].(float64); ok {
+		catID := int64(v)
+		salon.CategoryID = &catID
 	}
 
 	// Handle amenities array
 	if v, ok := doc["amenities"].([]interface{}); ok {
 		for _, a := range v {
 			if s, ok := a.(string); ok {
-				salon.Amenities = append(salon.Amenities, s)
+				salon.Amenities = append(salon.Amenities, domain.Amenity{Name: s})
 			}
 		}
 	}
@@ -563,7 +629,7 @@ func (es *ElasticsearchClient) documentToSalon(doc map[string]interface{}) domai
 	return salon
 }
 
-// DeleteIndex removes the index 
+// DeleteIndex removes the index
 func (es *ElasticsearchClient) DeleteIndex(ctx context.Context) error {
 	res, err := es.client.Indices.Delete(
 		[]string{SalonIndex},

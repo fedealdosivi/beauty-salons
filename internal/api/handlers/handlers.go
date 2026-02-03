@@ -182,7 +182,7 @@ func (h *Handler) parseSearchParams(c *gin.Context) domain.SalonSearchParams {
 
 	if priceStr := c.Query("price_range"); priceStr != "" {
 		if pr, err := strconv.Atoi(priceStr); err == nil {
-			params.PriceRange = &pr
+			params.PriceRange = domain.PriceRange(pr)
 		}
 	}
 
@@ -198,20 +198,27 @@ func (h *Handler) parseSearchParams(c *gin.Context) domain.SalonSearchParams {
 	}
 
 	// Geo search params
-	if latStr := c.Query("lat"); latStr != "" {
+	latStr := c.Query("lat")
+	lonStr := c.Query("lon")
+	if latStr != "" && lonStr != "" {
 		if lat, err := strconv.ParseFloat(latStr, 64); err == nil {
-			params.Latitude = &lat
-		}
-	}
-	if lonStr := c.Query("lon"); lonStr != "" {
-		if lon, err := strconv.ParseFloat(lonStr, 64); err == nil {
-			params.Longitude = &lon
+			if lon, err := strconv.ParseFloat(lonStr, 64); err == nil {
+				params.Location = &domain.GeoPoint{
+					Latitude:  lat,
+					Longitude: lon,
+				}
+			}
 		}
 	}
 	if radiusStr := c.Query("radius"); radiusStr != "" {
 		if r, err := strconv.ParseFloat(radiusStr, 64); err == nil {
 			params.RadiusKm = &r
 		}
+	}
+
+	// Sort option
+	if sortStr := c.Query("sort"); sortStr != "" {
+		params.SortBy = domain.SortOption(sortStr)
 	}
 
 	// Pagination
