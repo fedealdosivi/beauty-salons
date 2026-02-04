@@ -268,7 +268,7 @@ func (es *ElasticsearchClient) BulkIndexSalons(ctx context.Context, salons []dom
 }
 
 // Search performs a search query against Elasticsearch
-func (es *ElasticsearchClient) Search(ctx context.Context, params domain.SalonSearchParams) ([]domain.Salon, int, error) {
+func (es *ElasticsearchClient) Search(ctx context.Context, params domain.SalonSearchParams) ([]domain.SalonSearchResult, int, error) {
 	// Build the query
 	query := es.buildQuery(params)
 
@@ -298,17 +298,48 @@ func (es *ElasticsearchClient) Search(ctx context.Context, params domain.SalonSe
 	total := int(hits["total"].(map[string]interface{})["value"].(float64))
 
 	hitsList := hits["hits"].([]interface{})
-	salons := make([]domain.Salon, 0, len(hitsList))
+	results := make([]domain.SalonSearchResult, 0, len(hitsList))
 
 	for _, hit := range hitsList {
 		hitMap := hit.(map[string]interface{})
 		source := hitMap["_source"].(map[string]interface{})
 
 		salon := es.documentToSalon(source)
-		salons = append(salons, salon)
+		searchResult := domain.SalonSearchResult{
+			Salon: salon,
+		}
+
+		// Extract relevance score
+		if score, ok := hitMap["_score"].(float64); ok {
+			searchResult.Score = score
+		}
+
+		// Extract distance from sort values (present when geo_distance sort is used)
+		if sortValues, ok := hitMap["sort"].([]interface{}); ok && params.Location != nil {
+			for _, sv := range sortValues {
+				if dist, ok := sv.(float64); ok && dist >= 0 && dist < 40075 {
+					searchResult.Distance = &dist
+					break
+				}
+			}
+		}
+
+		// Extract highlights
+		if highlightMap, ok := hitMap["highlight"].(map[string]interface{}); ok {
+			searchResult.Highlights = make(map[string]string)
+			for field, fragments := range highlightMap {
+				if frags, ok := fragments.([]interface{}); ok && len(frags) > 0 {
+					if s, ok := frags[0].(string); ok {
+						searchResult.Highlights[field] = s
+					}
+				}
+			}
+		}
+
+		results = append(results, searchResult)
 	}
 
-	return salons, total, nil
+	return results, total, nil
 }
 
 // GetClusterHealth returns cluster health information
@@ -471,16 +502,97 @@ func (es *ElasticsearchClient) buildQuery(params domain.SalonSearchParams) map[s
 		sort = append(sort, map[string]interface{}{"rating": map[string]interface{}{"order": "desc", "missing": "_last"}})
 	}
 
+	// Build scoring functions for custom ranking
+	functions := []map[string]interface{}{
+		// Rating boost: rating * 2 (e.g., rating 4.5 adds +9)
+		{
+			"field_value_factor": map[string]interface{}{
+				"field":    "rating",
+				"factor":   2,
+				"modifier": "none",
+				"missing":  0,
+			},
+			"weight": 1,
+		},
+		// Review count boost: log1p for diminishing returns
+		// log1p(10)=2.4, log1p(50)=3.9, log1p(100)=4.6
+		{
+			"field_value_factor": map[string]interface{}{
+				"field":    "review_count",
+				"factor":   1,
+				"modifier": "log1p",
+				"missing":  0,
+			},
+			"weight": 1.5,
+		},
+		// Verified boost: verified salons get +5
+		{
+			"filter": map[string]interface{}{
+				"term": map[string]interface{}{
+					"is_verified": true,
+				},
+			},
+			"weight": 5,
+		},
+	}
+
+	// Distance decay: closer salons score higher (only when location provided)
+	if params.Location != nil {
+		functions = append(functions, map[string]interface{}{
+			"gauss": map[string]interface{}{
+				"location": map[string]interface{}{
+					"origin": map[string]interface{}{
+						"lat": params.Location.Latitude,
+						"lon": params.Location.Longitude,
+					},
+					"scale":  "5km",
+					"offset": "0km",
+					"decay":  0.5,
+				},
+			},
+			"weight": 3,
+		})
+	}
+
+	// Always append geo_distance sort when location is provided (for distance extraction)
+	if params.Location != nil && params.SortBy != domain.SortByDistance {
+		sort = append(sort, map[string]interface{}{
+			"_geo_distance": map[string]interface{}{
+				"location": map[string]interface{}{
+					"lat": params.Location.Latitude,
+					"lon": params.Location.Longitude,
+				},
+				"order": "asc",
+				"unit":  "km",
+			},
+		})
+	}
+
 	return map[string]interface{}{
 		"query": map[string]interface{}{
-			"bool": map[string]interface{}{
-				"must":   must,
-				"filter": filter,
+			"function_score": map[string]interface{}{
+				"query": map[string]interface{}{
+					"bool": map[string]interface{}{
+						"must":   must,
+						"filter": filter,
+					},
+				},
+				"functions":  functions,
+				"score_mode": "sum",
+				"boost_mode": "sum",
 			},
 		},
 		"sort": sort,
 		"from": from,
 		"size": pageSize,
+		"highlight": map[string]interface{}{
+			"fields": map[string]interface{}{
+				"name":        map[string]interface{}{},
+				"description": map[string]interface{}{},
+			},
+			"pre_tags":  []string{"<em>"},
+			"post_tags": []string{"</em>"},
+		},
 	}
 }
 

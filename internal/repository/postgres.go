@@ -315,7 +315,12 @@ func (r *PostgresRepository) SearchSalons(ctx context.Context, params domain.Sal
 			query += ` ORDER BY s.rating DESC NULLS LAST`
 		}
 	default:
-		query += ` ORDER BY s.rating DESC NULLS LAST, s.review_count DESC`
+		// Weighted ranking: rating*2 + log(1+reviews)*1.5 + verified bonus
+		query += ` ORDER BY (
+			COALESCE(s.rating, 0) * 2.0
+			+ LN(1 + COALESCE(s.review_count, 0)) * 1.5
+			+ CASE WHEN s.is_verified THEN 5.0 ELSE 0.0 END
+		) DESC`
 	}
 
 	// Pagination

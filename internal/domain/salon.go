@@ -378,6 +378,7 @@ type SearchResponse struct {
 	PageSize   int                 `json:"page_size"`
 	TotalPages int                 `json:"total_pages"`
 	Query      string              `json:"query,omitempty"`
+	Source     string              `json:"source,omitempty"`
 }
 
 // NewSearchResponse creates a SearchResponse with calculated pagination

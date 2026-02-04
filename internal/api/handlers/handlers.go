@@ -25,22 +25,12 @@ func NewHandler(repo *repository.PostgresRepository, es *search.ElasticsearchCli
 	}
 }
 
-// SearchResponse represents the API response for search endpoints
-type SearchResponse struct {
-	Data       []domain.Salon `json:"data"`
-	Total      int            `json:"total"`
-	Page       int            `json:"page"`
-	PageSize   int            `json:"page_size"`
-	TotalPages int            `json:"total_pages"`
-	Source     string         `json:"source"` // "elasticsearch" or "postgresql"
-}
-
 // SearchSalons handles search requests using Elasticsearch
 // GET /api/v1/search?q=...&city=...&category=...&min_rating=...&verified=...
 func (h *Handler) SearchSalons(c *gin.Context) {
 	params := h.parseSearchParams(c)
 
-	salons, total, err := h.es.Search(c.Request.Context(), params)
+	results, total, err := h.es.Search(c.Request.Context(), params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Search failed: " + err.Error(),
@@ -48,7 +38,9 @@ func (h *Handler) SearchSalons(c *gin.Context) {
 		return
 	}
 
-	h.sendSearchResponse(c, salons, total, params, "elasticsearch")
+	response := domain.NewSearchResponse(results, int64(total), params)
+	response.Source = "elasticsearch"
+	c.JSON(http.StatusOK, response)
 }
 
 // SearchSalonsPostgres handles search using PostgreSQL (for comparison)
@@ -64,7 +56,10 @@ func (h *Handler) SearchSalonsPostgres(c *gin.Context) {
 		return
 	}
 
-	h.sendSearchResponse(c, salons, total, params, "postgresql")
+	results := salonsToSearchResults(salons)
+	response := domain.NewSearchResponse(results, int64(total), params)
+	response.Source = "postgresql"
+	c.JSON(http.StatusOK, response)
 }
 
 // GetSalon retrieves a single salon by ID
@@ -244,15 +239,11 @@ func (h *Handler) parseSearchParams(c *gin.Context) domain.SalonSearchParams {
 	return params
 }
 
-func (h *Handler) sendSearchResponse(c *gin.Context, salons []domain.Salon, total int, params domain.SalonSearchParams, source string) {
-	totalPages := (total + params.PageSize - 1) / params.PageSize
-
-	c.JSON(http.StatusOK, SearchResponse{
-		Data:       salons,
-		Total:      total,
-		Page:       params.Page,
-		PageSize:   params.PageSize,
-		TotalPages: totalPages,
-		Source:     source,
-	})
+// salonsToSearchResults wraps plain salons into SalonSearchResult (for PostgreSQL responses)
+func salonsToSearchResults(salons []domain.Salon) []domain.SalonSearchResult {
+	results := make([]domain.SalonSearchResult, len(salons))
+	for i, s := range salons {
+		results[i] = domain.SalonSearchResult{Salon: s}
+	}
+	return results
 }
