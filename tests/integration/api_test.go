@@ -220,7 +220,9 @@ func TestAPIErrorResponses(t *testing.T) {
 			}
 
 			var response map[string]interface{}
-			json.Unmarshal(w.Body.Bytes(), &response)
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Failed to unmarshal response: %v", err)
+			}
 
 			_, hasError := response["error"]
 			if hasError != tt.wantError {

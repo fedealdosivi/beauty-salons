@@ -14,8 +14,8 @@ import (
 )
 
 func main() {
-	// Load .env file if it exists
-	godotenv.Load()
+	// Load .env file if it exists (ignore error if file doesn't exist)
+	_ = godotenv.Load()
 
 	// Get configuration from environment
 	pgConn := getEnv("DATABASE_URL", "postgres://beauty:beauty123@localhost:5432/beauty_salons?sslmode=disable")

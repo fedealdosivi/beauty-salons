@@ -282,7 +282,7 @@ func TestSalon_DistanceTo(t *testing.T) {
 	t.Run("salon with location", func(t *testing.T) {
 		dist := salonWithLocation.DistanceTo(userLocation)
 		if dist == nil {
-			t.Error("DistanceTo() returned nil, expected distance")
+			t.Fatal("DistanceTo() returned nil, expected distance")
 		}
 		if *dist < 0.9 || *dist > 1.1 {
 			t.Errorf("DistanceTo() = %v, want ~1km", *dist)

@@ -230,12 +230,12 @@ func (es *ElasticsearchClient) BulkIndexSalons(ctx context.Context, salons []dom
 	}
 
 	var buf bytes.Buffer
-	for _, salon := range salons {
+	for i := range salons {
 		// Action line
 		meta := map[string]interface{}{
 			"index": map[string]interface{}{
 				"_index": SalonIndex,
-				"_id":    fmt.Sprintf("%d", salon.ID),
+				"_id":    fmt.Sprintf("%d", salons[i].ID),
 			},
 		}
 		metaBytes, _ := json.Marshal(meta)
@@ -243,7 +243,7 @@ func (es *ElasticsearchClient) BulkIndexSalons(ctx context.Context, salons []dom
 		buf.WriteByte('\n')
 
 		// Document line
-		doc := es.salonToDocument(&salon)
+		doc := es.salonToDocument(&salons[i])
 		docBytes, _ := json.Marshal(doc)
 		buf.Write(docBytes)
 		buf.WriteByte('\n')
