@@ -28,7 +28,7 @@ func NewHandler(repo *repository.PostgresRepository, es *search.ElasticsearchCli
 // SearchSalons handles search requests using Elasticsearch
 // GET /api/v1/search?q=...&city=...&category=...&min_rating=...&verified=...
 func (h *Handler) SearchSalons(c *gin.Context) {
-	params := h.parseSearchParams(c)
+	params := h.ParseSearchParams(c)
 
 	results, total, err := h.es.Search(c.Request.Context(), params)
 	if err != nil {
@@ -46,7 +46,7 @@ func (h *Handler) SearchSalons(c *gin.Context) {
 // SearchSalonsPostgres handles search using PostgreSQL (for comparison)
 // GET /api/v1/search/postgres?q=...
 func (h *Handler) SearchSalonsPostgres(c *gin.Context) {
-	params := h.parseSearchParams(c)
+	params := h.ParseSearchParams(c)
 
 	salons, total, err := h.repo.SearchSalons(c.Request.Context(), params)
 	if err != nil {
@@ -56,7 +56,7 @@ func (h *Handler) SearchSalonsPostgres(c *gin.Context) {
 		return
 	}
 
-	results := salonsToSearchResults(salons)
+	results := SalonsToSearchResults(salons)
 	response := domain.NewSearchResponse(results, int64(total), params)
 	response.Source = "postgresql"
 	c.JSON(http.StatusOK, response)
@@ -163,7 +163,8 @@ func (h *Handler) GetIndexStats(c *gin.Context) {
 
 // Helper methods
 
-func (h *Handler) parseSearchParams(c *gin.Context) domain.SalonSearchParams {
+// ParseSearchParams extracts search parameters from the request query string
+func (h *Handler) ParseSearchParams(c *gin.Context) domain.SalonSearchParams {
 	params := domain.SalonSearchParams{
 		Query: c.Query("q"),
 		City:  c.Query("city"),
@@ -239,8 +240,8 @@ func (h *Handler) parseSearchParams(c *gin.Context) domain.SalonSearchParams {
 	return params
 }
 
-// salonsToSearchResults wraps plain salons into SalonSearchResult (for PostgreSQL responses)
-func salonsToSearchResults(salons []domain.Salon) []domain.SalonSearchResult {
+// SalonsToSearchResults wraps plain salons into SalonSearchResult (for PostgreSQL responses)
+func SalonsToSearchResults(salons []domain.Salon) []domain.SalonSearchResult {
 	results := make([]domain.SalonSearchResult, len(salons))
 	for i, s := range salons {
 		results[i] = domain.SalonSearchResult{Salon: s}

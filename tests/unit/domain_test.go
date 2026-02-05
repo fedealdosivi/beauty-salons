@@ -1,36 +1,38 @@
-package domain
+package unit
 
 import (
 	"testing"
 	"time"
+
+	"beauty-salons/internal/domain"
 )
 
 func TestGeoPoint_DistanceTo(t *testing.T) {
 	tests := []struct {
-		name     string
-		from     GeoPoint
-		to       GeoPoint
-		wantMin  float64
-		wantMax  float64
+		name    string
+		from    domain.GeoPoint
+		to      domain.GeoPoint
+		wantMin float64
+		wantMax float64
 	}{
 		{
 			name:    "same point",
-			from:    GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
-			to:      GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
+			from:    domain.GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
+			to:      domain.GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
 			wantMin: 0,
 			wantMax: 0.001,
 		},
 		{
 			name:    "NYC to LA approximately 3944km",
-			from:    GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
-			to:      GeoPoint{Latitude: 34.0522, Longitude: -118.2437},
+			from:    domain.GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
+			to:      domain.GeoPoint{Latitude: 34.0522, Longitude: -118.2437},
 			wantMin: 3900,
 			wantMax: 4000,
 		},
 		{
 			name:    "short distance 1km",
-			from:    GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
-			to:      GeoPoint{Latitude: 40.7218, Longitude: -74.0060},
+			from:    domain.GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
+			to:      domain.GeoPoint{Latitude: 40.7218, Longitude: -74.0060},
 			wantMin: 0.9,
 			wantMax: 1.1,
 		},
@@ -49,17 +51,17 @@ func TestGeoPoint_DistanceTo(t *testing.T) {
 func TestGeoPoint_IsValid(t *testing.T) {
 	tests := []struct {
 		name  string
-		point GeoPoint
+		point domain.GeoPoint
 		want  bool
 	}{
-		{"valid point", GeoPoint{Latitude: 40.7128, Longitude: -74.0060}, true},
-		{"zero point", GeoPoint{Latitude: 0, Longitude: 0}, true},
-		{"max bounds", GeoPoint{Latitude: 90, Longitude: 180}, true},
-		{"min bounds", GeoPoint{Latitude: -90, Longitude: -180}, true},
-		{"invalid latitude high", GeoPoint{Latitude: 91, Longitude: 0}, false},
-		{"invalid latitude low", GeoPoint{Latitude: -91, Longitude: 0}, false},
-		{"invalid longitude high", GeoPoint{Latitude: 0, Longitude: 181}, false},
-		{"invalid longitude low", GeoPoint{Latitude: 0, Longitude: -181}, false},
+		{"valid point", domain.GeoPoint{Latitude: 40.7128, Longitude: -74.0060}, true},
+		{"zero point", domain.GeoPoint{Latitude: 0, Longitude: 0}, true},
+		{"max bounds", domain.GeoPoint{Latitude: 90, Longitude: 180}, true},
+		{"min bounds", domain.GeoPoint{Latitude: -90, Longitude: -180}, true},
+		{"invalid latitude high", domain.GeoPoint{Latitude: 91, Longitude: 0}, false},
+		{"invalid latitude low", domain.GeoPoint{Latitude: -91, Longitude: 0}, false},
+		{"invalid longitude high", domain.GeoPoint{Latitude: 0, Longitude: 181}, false},
+		{"invalid longitude low", domain.GeoPoint{Latitude: 0, Longitude: -181}, false},
 	}
 
 	for _, tt := range tests {
@@ -74,12 +76,12 @@ func TestGeoPoint_IsValid(t *testing.T) {
 func TestLocation_FullAddress(t *testing.T) {
 	tests := []struct {
 		name     string
-		location Location
+		location domain.Location
 		want     string
 	}{
 		{
 			name: "full address",
-			location: Location{
+			location: domain.Location{
 				Address:    "123 Main St",
 				City:       "New York",
 				State:      "NY",
@@ -90,7 +92,7 @@ func TestLocation_FullAddress(t *testing.T) {
 		},
 		{
 			name: "partial address",
-			location: Location{
+			location: domain.Location{
 				City:  "Miami",
 				State: "FL",
 			},
@@ -98,7 +100,7 @@ func TestLocation_FullAddress(t *testing.T) {
 		},
 		{
 			name:     "empty address",
-			location: Location{},
+			location: domain.Location{},
 			want:     "",
 		},
 	}
@@ -114,13 +116,13 @@ func TestLocation_FullAddress(t *testing.T) {
 
 func TestPriceRange_String(t *testing.T) {
 	tests := []struct {
-		pr   PriceRange
+		pr   domain.PriceRange
 		want string
 	}{
-		{PriceBudget, "$"},
-		{PriceModerate, "$$"},
-		{PriceUpscale, "$$$"},
-		{PriceLuxury, "$$$$"},
+		{domain.PriceBudget, "$"},
+		{domain.PriceModerate, "$$"},
+		{domain.PriceUpscale, "$$$"},
+		{domain.PriceLuxury, "$$$$"},
 	}
 
 	for _, tt := range tests {
@@ -134,15 +136,15 @@ func TestPriceRange_String(t *testing.T) {
 
 func TestPriceRange_IsValid(t *testing.T) {
 	tests := []struct {
-		pr   PriceRange
+		pr   domain.PriceRange
 		want bool
 	}{
-		{PriceRange(0), false},
-		{PriceBudget, true},
-		{PriceModerate, true},
-		{PriceUpscale, true},
-		{PriceLuxury, true},
-		{PriceRange(5), false},
+		{domain.PriceRange(0), false},
+		{domain.PriceBudget, true},
+		{domain.PriceModerate, true},
+		{domain.PriceUpscale, true},
+		{domain.PriceLuxury, true},
+		{domain.PriceRange(5), false},
 	}
 
 	for _, tt := range tests {
@@ -157,44 +159,44 @@ func TestPriceRange_IsValid(t *testing.T) {
 func TestSalon_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		salon   Salon
+		salon   domain.Salon
 		wantErr bool
 	}{
 		{
 			name: "valid salon",
-			salon: Salon{
+			salon: domain.Salon{
 				Name:       "Test Salon",
 				Slug:       "test-salon",
-				PriceRange: PriceModerate,
+				PriceRange: domain.PriceModerate,
 			},
 			wantErr: false,
 		},
 		{
 			name: "missing name",
-			salon: Salon{
+			salon: domain.Salon{
 				Slug: "test-salon",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing slug",
-			salon: Salon{
+			salon: domain.Salon{
 				Name: "Test Salon",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid price range",
-			salon: Salon{
+			salon: domain.Salon{
 				Name:       "Test Salon",
 				Slug:       "test-salon",
-				PriceRange: PriceRange(10),
+				PriceRange: domain.PriceRange(10),
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid rating too high",
-			salon: Salon{
+			salon: domain.Salon{
 				Name:   "Test Salon",
 				Slug:   "test-salon",
 				Rating: floatPtr(5.5),
@@ -203,7 +205,7 @@ func TestSalon_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid rating negative",
-			salon: Salon{
+			salon: domain.Salon{
 				Name:   "Test Salon",
 				Slug:   "test-salon",
 				Rating: floatPtr(-1),
@@ -212,11 +214,11 @@ func TestSalon_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid geo coordinates",
-			salon: Salon{
+			salon: domain.Salon{
 				Name: "Test Salon",
 				Slug: "test-salon",
-				Location: Location{
-					GeoPoint: &GeoPoint{Latitude: 100, Longitude: 0},
+				Location: domain.Location{
+					GeoPoint: &domain.GeoPoint{Latitude: 100, Longitude: 0},
 				},
 			},
 			wantErr: true,
@@ -241,8 +243,8 @@ func TestSalon_IsOpen(t *testing.T) {
 	// Sunday 10:00 AM
 	sunday10am := time.Date(2024, 1, 14, 10, 0, 0, 0, time.UTC)
 
-	salon := Salon{
-		OperatingHours: []OperatingHours{
+	salon := domain.Salon{
+		OperatingHours: []domain.OperatingHours{
 			{DayOfWeek: 1, OpenTime: "09:00:00", CloseTime: "18:00:00", IsClosed: false}, // Monday
 			{DayOfWeek: 0, OpenTime: "00:00:00", CloseTime: "00:00:00", IsClosed: true},  // Sunday closed
 		},
@@ -268,14 +270,14 @@ func TestSalon_IsOpen(t *testing.T) {
 }
 
 func TestSalon_DistanceTo(t *testing.T) {
-	salonWithLocation := Salon{
-		Location: Location{
-			GeoPoint: &GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
+	salonWithLocation := domain.Salon{
+		Location: domain.Location{
+			GeoPoint: &domain.GeoPoint{Latitude: 40.7128, Longitude: -74.0060},
 		},
 	}
-	salonWithoutLocation := Salon{}
+	salonWithoutLocation := domain.Salon{}
 
-	userLocation := GeoPoint{Latitude: 40.7218, Longitude: -74.0060}
+	userLocation := domain.GeoPoint{Latitude: 40.7218, Longitude: -74.0060}
 
 	t.Run("salon with location", func(t *testing.T) {
 		dist := salonWithLocation.DistanceTo(userLocation)
@@ -298,32 +300,32 @@ func TestSalon_DistanceTo(t *testing.T) {
 func TestService_PriceDisplay(t *testing.T) {
 	tests := []struct {
 		name    string
-		service Service
+		service domain.Service
 		want    string
 	}{
 		{
 			name:    "no prices",
-			service: Service{},
+			service: domain.Service{},
 			want:    "Price varies",
 		},
 		{
 			name:    "same min and max",
-			service: Service{PriceMin: floatPtr(50), PriceMax: floatPtr(50)},
+			service: domain.Service{PriceMin: floatPtr(50), PriceMax: floatPtr(50)},
 			want:    "$50.00",
 		},
 		{
 			name:    "price range",
-			service: Service{PriceMin: floatPtr(30), PriceMax: floatPtr(50)},
+			service: domain.Service{PriceMin: floatPtr(30), PriceMax: floatPtr(50)},
 			want:    "$30.00 - $50.00",
 		},
 		{
 			name:    "only min",
-			service: Service{PriceMin: floatPtr(30)},
+			service: domain.Service{PriceMin: floatPtr(30)},
 			want:    "From $30.00",
 		},
 		{
 			name:    "only max",
-			service: Service{PriceMax: floatPtr(100)},
+			service: domain.Service{PriceMax: floatPtr(100)},
 			want:    "Up to $100.00",
 		},
 	}
@@ -340,32 +342,32 @@ func TestService_PriceDisplay(t *testing.T) {
 func TestService_DurationDisplay(t *testing.T) {
 	tests := []struct {
 		name    string
-		service Service
+		service domain.Service
 		want    string
 	}{
 		{
 			name:    "no duration",
-			service: Service{},
+			service: domain.Service{},
 			want:    "",
 		},
 		{
 			name:    "30 minutes",
-			service: Service{DurationMinutes: intPtr(30)},
+			service: domain.Service{DurationMinutes: intPtr(30)},
 			want:    "30 min",
 		},
 		{
 			name:    "1 hour",
-			service: Service{DurationMinutes: intPtr(60)},
+			service: domain.Service{DurationMinutes: intPtr(60)},
 			want:    "1 hr",
 		},
 		{
 			name:    "1 hour 30 minutes",
-			service: Service{DurationMinutes: intPtr(90)},
+			service: domain.Service{DurationMinutes: intPtr(90)},
 			want:    "1 hr 30 min",
 		},
 		{
 			name:    "2 hours",
-			service: Service{DurationMinutes: intPtr(120)},
+			service: domain.Service{DurationMinutes: intPtr(120)},
 			want:    "2 hr",
 		},
 	}
@@ -382,37 +384,37 @@ func TestService_DurationDisplay(t *testing.T) {
 func TestService_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		service Service
+		service domain.Service
 		wantErr bool
 	}{
 		{
 			name:    "valid service",
-			service: Service{Name: "Haircut", SalonID: 1},
+			service: domain.Service{Name: "Haircut", SalonID: 1},
 			wantErr: false,
 		},
 		{
 			name:    "missing name",
-			service: Service{SalonID: 1},
+			service: domain.Service{SalonID: 1},
 			wantErr: true,
 		},
 		{
 			name:    "missing salon_id",
-			service: Service{Name: "Haircut"},
+			service: domain.Service{Name: "Haircut"},
 			wantErr: true,
 		},
 		{
 			name:    "negative price_min",
-			service: Service{Name: "Haircut", SalonID: 1, PriceMin: floatPtr(-10)},
+			service: domain.Service{Name: "Haircut", SalonID: 1, PriceMin: floatPtr(-10)},
 			wantErr: true,
 		},
 		{
 			name:    "price_min greater than price_max",
-			service: Service{Name: "Haircut", SalonID: 1, PriceMin: floatPtr(100), PriceMax: floatPtr(50)},
+			service: domain.Service{Name: "Haircut", SalonID: 1, PriceMin: floatPtr(100), PriceMax: floatPtr(50)},
 			wantErr: true,
 		},
 		{
 			name:    "zero duration",
-			service: Service{Name: "Haircut", SalonID: 1, DurationMinutes: intPtr(0)},
+			service: domain.Service{Name: "Haircut", SalonID: 1, DurationMinutes: intPtr(0)},
 			wantErr: true,
 		},
 	}
@@ -445,7 +447,7 @@ func TestOperatingHours_DayName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
-			oh := OperatingHours{DayOfWeek: tt.day}
+			oh := domain.OperatingHours{DayOfWeek: tt.day}
 			if got := oh.DayName(); got != tt.want {
 				t.Errorf("DayName() = %v, want %v", got, tt.want)
 			}
@@ -456,17 +458,17 @@ func TestOperatingHours_DayName(t *testing.T) {
 func TestOperatingHours_DisplayHours(t *testing.T) {
 	tests := []struct {
 		name string
-		oh   OperatingHours
+		oh   domain.OperatingHours
 		want string
 	}{
 		{
 			name: "open hours",
-			oh:   OperatingHours{OpenTime: "09:00:00", CloseTime: "18:00:00", IsClosed: false},
+			oh:   domain.OperatingHours{OpenTime: "09:00:00", CloseTime: "18:00:00", IsClosed: false},
 			want: "09:00 - 18:00",
 		},
 		{
 			name: "closed",
-			oh:   OperatingHours{IsClosed: true},
+			oh:   domain.OperatingHours{IsClosed: true},
 			want: "Closed",
 		},
 	}
@@ -481,17 +483,17 @@ func TestOperatingHours_DisplayHours(t *testing.T) {
 }
 
 func TestNewSearchResponse(t *testing.T) {
-	results := []SalonSearchResult{
-		{Salon: Salon{ID: 1}},
-		{Salon: Salon{ID: 2}},
+	results := []domain.SalonSearchResult{
+		{Salon: domain.Salon{ID: 1}},
+		{Salon: domain.Salon{ID: 2}},
 	}
-	params := SalonSearchParams{
+	params := domain.SalonSearchParams{
 		Query:    "test",
 		Page:     1,
 		PageSize: 10,
 	}
 
-	response := NewSearchResponse(results, 25, params)
+	response := domain.NewSearchResponse(results, 25, params)
 
 	if response.Total != 25 {
 		t.Errorf("Total = %v, want 25", response.Total)

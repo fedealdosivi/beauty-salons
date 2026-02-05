@@ -1,4 +1,4 @@
-package handlers
+package unit
 
 import (
 	"encoding/json"
@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"beauty-salons/internal/api/handlers"
 	"beauty-salons/internal/domain"
 
 	"github.com/gin-gonic/gin"
@@ -153,8 +154,8 @@ func TestParseSearchParams(t *testing.T) {
 			c, _ := gin.CreateTestContext(w)
 			c.Request = httptest.NewRequest("GET", "/search?"+tt.queryString, nil)
 
-			h := &Handler{}
-			params := h.parseSearchParams(c)
+			h := handlers.NewHandler(nil, nil)
+			params := h.ParseSearchParams(c)
 			tt.check(t, params)
 		})
 	}
@@ -167,7 +168,7 @@ func TestSalonsToSearchResults(t *testing.T) {
 		{ID: 3, Name: "Salon C"},
 	}
 
-	results := salonsToSearchResults(salons)
+	results := handlers.SalonsToSearchResults(salons)
 
 	if len(results) != 3 {
 		t.Fatalf("len(results) = %v, want 3", len(results))
@@ -245,11 +246,6 @@ func TestSearchResponseFormat(t *testing.T) {
 	if _, ok := result["score"]; !ok {
 		t.Error("Result missing 'score' field")
 	}
-}
-
-// Mock handler for integration tests
-type mockHandler struct {
-	*Handler
 }
 
 func TestHealthEndpoint(t *testing.T) {
