@@ -1,4 +1,4 @@
-.PHONY: help up down logs api sync test-search health
+.PHONY: help up down logs api sync test-search health test test-v test-cover test-unit test-integration lint build
 
 # Default target
 help:
@@ -11,10 +11,17 @@ help:
 	@echo ""
 	@echo "Application commands:"
 	@echo "  make deps        - Download Go dependencies"
+	@echo "  make build       - Build the application"
 	@echo "  make api         - Run the API server"
 	@echo "  make sync        - Sync data from PostgreSQL to Elasticsearch"
 	@echo ""
 	@echo "Testing commands:"
+	@echo "  make test        - Run all tests"
+	@echo "  make test-unit   - Run unit tests only (internal packages)"
+	@echo "  make test-integration - Run integration tests only (tests/)"
+	@echo "  make test-v      - Run all tests (verbose)"
+	@echo "  make test-cover  - Run tests with coverage"
+	@echo "  make lint        - Run linter"
 	@echo "  make test-search - Test search with sample queries"
 	@echo "  make health      - Check cluster health"
 	@echo ""
@@ -49,9 +56,39 @@ deps:
 	go mod download
 	go mod tidy
 
+# Build the application
+build:
+	go build -v ./...
+
 # Run the API
 api:
 	go run cmd/api/main.go
+
+# Run all tests
+test:
+	go test ./...
+
+# Run unit tests only (internal packages)
+test-unit:
+	go test ./internal/...
+
+# Run integration tests only
+test-integration:
+	go test ./tests/...
+
+# Run all tests (verbose)
+test-v:
+	go test -v ./...
+
+# Run tests with coverage
+test-cover:
+	go test -race -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
+
+# Run linter (requires golangci-lint)
+lint:
+	golangci-lint run
 
 # Sync data to Elasticsearch
 sync:
