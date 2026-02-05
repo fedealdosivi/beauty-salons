@@ -26,8 +26,6 @@
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Key Concepts You'll Learn
-
 ### 1. Clusters
 Elasticsearch runs as a **scluster** - a collection of nodes that work together.
 

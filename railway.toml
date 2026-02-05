@@ -1,0 +1,9 @@
+[build]
+builder = "go"
+
+[deploy]
+startCommand = "go run cmd/api/main.go"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
